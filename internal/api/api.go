@@ -5,24 +5,40 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 
+	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/acquirer"
 	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/repository"
+	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"golang.org/x/sync/errgroup"
 )
 
+const defaultBankSimulatorURL = "http://localhost:8080"
+
 type Api struct {
-	router       *chi.Mux
-	paymentsRepo *repository.PaymentsRepository
+	router      *chi.Mux
+	paymentsSvc *service.PaymentService
 }
 
 func New() *Api {
 	a := &Api{}
-	a.paymentsRepo = repository.NewPaymentsRepository()
+
+	repo := repository.NewPaymentsRepository()
+	acq := acquirer.NewHTTPAcquirer(bankSimulatorURL())
+	a.paymentsSvc = service.New(repo, acq)
+
 	a.setupRouter()
 
 	return a
+}
+
+func bankSimulatorURL() string {
+	if url := os.Getenv("BANK_SIMULATOR_URL"); url != "" {
+		return url
+	}
+	return defaultBankSimulatorURL
 }
 
 func (a *Api) Run(ctx context.Context, addr string) error {
@@ -61,4 +77,5 @@ func (a *Api) setupRouter() {
 	a.router.Get("/swagger/*", a.SwaggerHandler())
 
 	a.router.Get("/api/payments/{id}", a.GetPaymentHandler())
+	a.router.Post("/api/payments", a.PostPaymentHandler())
 }

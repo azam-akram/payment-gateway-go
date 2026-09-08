@@ -7,6 +7,7 @@ import (
 
 	"github.com/cko-recruitment/payment-gateway-challenge-go/docs"
 	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/handlers"
+	_ "github.com/cko-recruitment/payment-gateway-challenge-go/internal/models"
 	httpSwagger "github.com/swaggo/http-swagger"
 )
 
@@ -14,7 +15,6 @@ type pong struct {
 	Message string `json:"message"`
 }
 
-// PingHandler returns an http.HandlerFunc that handles HTTP Ping GET requests.
 func (a *Api) PingHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -32,9 +32,14 @@ func (a *Api) SwaggerHandler() http.HandlerFunc {
 	)
 }
 
-// GetPaymentHandler returns an http.HandlerFunc that handles Payments GET requests.
 func (a *Api) GetPaymentHandler() http.HandlerFunc {
-	h := handlers.NewPaymentsHandler(a.paymentsRepo)
+	h := handlers.NewPaymentsHandler(a.paymentsSvc)
 
 	return h.GetHandler()
+}
+
+func (a *Api) PostPaymentHandler() http.HandlerFunc {
+	h := handlers.NewPaymentsHandler(a.paymentsSvc)
+
+	return h.PostHandler()
 }

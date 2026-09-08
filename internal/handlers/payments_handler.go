@@ -4,17 +4,18 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/repository"
+	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/models"
+	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/service"
 	"github.com/go-chi/chi/v5"
 )
 
 type PaymentsHandler struct {
-	storage *repository.PaymentsRepository
+	service *service.PaymentService
 }
 
-func NewPaymentsHandler(storage *repository.PaymentsRepository) *PaymentsHandler {
+func NewPaymentsHandler(svc *service.PaymentService) *PaymentsHandler {
 	return &PaymentsHandler{
-		storage: storage,
+		service: svc,
 	}
 }
 
@@ -24,21 +25,46 @@ func NewPaymentsHandler(storage *repository.PaymentsRepository) *PaymentsHandler
 func (h *PaymentsHandler) GetHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
-		payment := h.storage.GetPayment(id)
 
-		if payment != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			if err := json.NewEncoder(w).Encode(payment); err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-			}
-		} else {
-			w.WriteHeader(http.StatusNoContent)
+		payment, found := h.service.GetPayment(id)
+		if !found {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		writeJSON(w, http.StatusOK, payment)
+	}
+}
+
+func (h *PaymentsHandler) PostHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		var req models.PaymentRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, models.RejectedResponse{
+				Status: models.StatusRejected,
+				Errors: []string{"request body must be valid JSON: " + err.Error()},
+			})
+			return
+		}
+
+		payment, rejected, err := h.service.ProcessPayment(r.Context(), req)
+		switch {
+		case err != nil:
+			w.WriteHeader(http.StatusServiceUnavailable)
+		case rejected != nil:
+			writeJSON(w, http.StatusBadRequest, rejected)
+		default:
+			writeJSON(w, http.StatusCreated, payment)
 		}
 	}
 }
 
-func (ph *PaymentsHandler) PostHandler() http.HandlerFunc {
-	//TODO
-	return nil
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 }

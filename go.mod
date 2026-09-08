@@ -1,9 +1,10 @@
 module github.com/cko-recruitment/payment-gateway-challenge-go
 
-go 1.21
+go 1.25.3
 
 require (
 	github.com/go-chi/chi/v5 v5.0.12
+	github.com/google/uuid v1.6.0
 	github.com/swaggo/http-swagger v1.3.4
 )
 
