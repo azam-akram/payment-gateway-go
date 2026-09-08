@@ -1,21 +1,29 @@
 package handlers
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/acquirer"
 	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/models"
 	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/repository"
+	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetPaymentHandler(t *testing.T) {
-	payment := models.PostPaymentResponse{
+	payment := models.PaymentResponse{
 		Id:                 "test-id",
-		PaymentStatus:      "test-successful-status",
-		CardNumberLastFour: 1234,
+		Status:             "test-successful-status",
+		CardNumberLastFour: "1234",
 		ExpiryMonth:        10,
 		ExpiryYear:         2035,
 		Currency:           "GBP",
@@ -23,8 +31,9 @@ func TestGetPaymentHandler(t *testing.T) {
 	}
 	ps := repository.NewPaymentsRepository()
 	ps.AddPayment(payment)
+	svc := service.New(ps, &acquirer.FakeAcquirer{})
 
-	payments := NewPaymentsHandler(ps)
+	payments := NewPaymentsHandler(svc)
 
 	r := chi.NewRouter()
 	r.Get("/api/payments/{id}", payments.GetHandler())
@@ -68,4 +77,167 @@ func TestGetPaymentHandler(t *testing.T) {
 		// Check the HTTP status code in the response
 		assert.Equal(t, http.StatusNotFound, w.Code)
 	})
+}
+
+// validPaymentBody returns a request body that passes every validation
+// rule, as a map so individual tests can mutate one field at a time.
+func validPaymentBody() map[string]any {
+	future := time.Now().AddDate(1, 0, 0)
+	return map[string]any{
+		"card_number":  "2222405343248877",
+		"expiry_month": int(future.Month()),
+		"expiry_year":  future.Year(),
+		"currency":     "GBP",
+		"amount":       100,
+		"cvv":          "123",
+	}
+}
+
+// newPostHandler builds a router serving only PostHandler, backed by a
+// fresh in-memory repository and the given fake acquirer.
+func newPostHandler(fake *acquirer.FakeAcquirer) (http.Handler, *repository.PaymentsRepository) {
+	repo := repository.NewPaymentsRepository()
+	svc := service.New(repo, fake)
+	h := NewPaymentsHandler(svc)
+
+	r := chi.NewRouter()
+	r.Post("/api/payments", h.PostHandler())
+	return r, repo
+}
+
+func doPostJSON(t *testing.T, handler http.Handler, body any) *httptest.ResponseRecorder {
+	t.Helper()
+
+	raw, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/payments", bytes.NewReader(raw))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	return w
+}
+
+func TestPostPaymentHandler_Authorized(t *testing.T) {
+	fake := &acquirer.FakeAcquirer{
+		AuthorizeFunc: func(ctx context.Context, req acquirer.BankRequest) (acquirer.BankResponse, error) {
+			return acquirer.BankResponse{Authorized: true, AuthorizationCode: "auth-code"}, nil
+		},
+	}
+	handler, repo := newPostHandler(fake)
+
+	w := doPostJSON(t, handler, validPaymentBody())
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	var resp models.PaymentResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, models.StatusAuthorized, resp.Status)
+	assert.Equal(t, "8877", resp.CardNumberLastFour)
+	assert.NotEmpty(t, resp.Id)
+	assert.Equal(t, 1, repo.Count())
+}
+
+func TestPostPaymentHandler_Declined(t *testing.T) {
+	fake := &acquirer.FakeAcquirer{
+		AuthorizeFunc: func(ctx context.Context, req acquirer.BankRequest) (acquirer.BankResponse, error) {
+			return acquirer.BankResponse{Authorized: false}, nil
+		},
+	}
+	handler, repo := newPostHandler(fake)
+
+	w := doPostJSON(t, handler, validPaymentBody())
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	var resp models.PaymentResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, models.StatusDeclined, resp.Status)
+	assert.Equal(t, 1, repo.Count())
+}
+
+func TestPostPaymentHandler_Rejected_InvalidCardNumber(t *testing.T) {
+	fake := &acquirer.FakeAcquirer{}
+	handler, repo := newPostHandler(fake)
+
+	body := validPaymentBody()
+	body["card_number"] = "123"
+
+	w := doPostJSON(t, handler, body)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Empty(t, fake.Calls, "acquirer must never be called for a rejected request")
+	assert.Equal(t, 0, repo.Count())
+
+	var resp models.RejectedResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, models.StatusRejected, resp.Status)
+	assert.Contains(t, resp.Errors, "card_number must be between 14 and 19 characters long")
+}
+
+func TestPostPaymentHandler_Rejected_InvalidCurrency(t *testing.T) {
+	fake := &acquirer.FakeAcquirer{}
+	handler, _ := newPostHandler(fake)
+
+	body := validPaymentBody()
+	body["currency"] = "JPY"
+
+	w := doPostJSON(t, handler, body)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	var resp models.RejectedResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, models.StatusRejected, resp.Status)
+	assert.Contains(t, resp.Errors[0], "currency must be one of")
+}
+
+func TestPostPaymentHandler_Rejected_MissingField(t *testing.T) {
+	fake := &acquirer.FakeAcquirer{}
+	handler, _ := newPostHandler(fake)
+
+	body := validPaymentBody()
+	delete(body, "cvv")
+
+	w := doPostJSON(t, handler, body)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	var resp models.RejectedResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Contains(t, resp.Errors, "cvv is required")
+}
+
+func TestPostPaymentHandler_Rejected_MalformedJSON(t *testing.T) {
+	fake := &acquirer.FakeAcquirer{}
+	handler, repo := newPostHandler(fake)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/payments", strings.NewReader("{not valid json"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Empty(t, fake.Calls)
+	assert.Equal(t, 0, repo.Count())
+
+	var resp models.RejectedResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, models.StatusRejected, resp.Status)
+}
+
+func TestPostPaymentHandler_BankUnavailable(t *testing.T) {
+	fake := &acquirer.FakeAcquirer{
+		AuthorizeFunc: func(ctx context.Context, req acquirer.BankRequest) (acquirer.BankResponse, error) {
+			return acquirer.BankResponse{}, acquirer.ErrBankUnavailable
+		},
+	}
+	handler, repo := newPostHandler(fake)
+
+	w := doPostJSON(t, handler, validPaymentBody())
+
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+	assert.Empty(t, w.Body.Bytes())
+	assert.Equal(t, 0, repo.Count())
 }
