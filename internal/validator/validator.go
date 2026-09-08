@@ -8,8 +8,7 @@ import (
 )
 
 // allowedCurrencies is the fixed 3-code allow-list required by the
-// challenge. Not a
-// general ISO-4217 table by design.
+// challenge. Not a general ISO-4217 table by design.
 var allowedCurrencies = map[string]bool{
 	"GBP": true,
 	"USD": true,
@@ -55,8 +54,6 @@ func validateExpiry(month, year int) []string {
 		errs = append(errs, "expiry_year is required")
 	}
 
-	// Only assess "in the future" once month/year individually look sane;
-	// otherwise this would just be restating the errors above.
 	if monthValid && year != 0 && !expiryIsInFuture(month, year) {
 		errs = append(errs, "expiry_month and expiry_year combination must be in the future")
 	}

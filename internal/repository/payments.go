@@ -17,29 +17,30 @@ func NewPaymentsRepository() *PaymentsRepository {
 	}
 }
 
-func (ps *PaymentsRepository) GetPayment(id string) *models.PaymentResponse {
-	ps.mu.RLock()
-	defer ps.mu.RUnlock()
+// supports only in-memory storage
+func (pr *PaymentsRepository) GetPayment(id string) *models.PaymentResponse {
+	pr.mu.RLock()
+	defer pr.mu.RUnlock()
 
-	payment, ok := ps.payments[id]
+	payment, ok := pr.payments[id]
 	if !ok {
 		return nil
 	}
 	return &payment
 }
 
-func (ps *PaymentsRepository) AddPayment(payment models.PaymentResponse) {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
+func (pr *PaymentsRepository) AddPayment(payment models.PaymentResponse) {
+	pr.mu.Lock()
+	defer pr.mu.Unlock()
 
-	ps.payments[payment.Id] = payment
+	pr.payments[payment.Id] = payment
 }
 
 // Count returns the number of stored payments. Intended for tests that
 // need to assert nothing (or exactly one thing) was persisted.
-func (ps *PaymentsRepository) Count() int {
-	ps.mu.RLock()
-	defer ps.mu.RUnlock()
+func (pr *PaymentsRepository) Count() int {
+	pr.mu.RLock()
+	defer pr.mu.RUnlock()
 
-	return len(ps.payments)
+	return len(pr.payments)
 }

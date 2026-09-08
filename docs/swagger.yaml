@@ -58,8 +58,16 @@ paths:
       - application/json
       description: Validates the request and, if valid, forwards it to the acquiring
         bank and persists the outcome. A request that fails validation (or isn't valid
-        JSON) is Rejected without ever calling the bank.
+        JSON) is Rejected without ever calling the bank. Requires an Idempotency-Key
+        header; retrying the same key and body replays the original result instead
+        of charging the bank again.
       parameters:
+      - description: Unique key to safely retry a request without duplicating the
+          payment
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
       - description: Payment details
         in: body
         name: payment
@@ -74,7 +82,12 @@ paths:
           schema:
             $ref: '#/definitions/models.PaymentResponse'
         "400":
-          description: Rejected - validation failed
+          description: Rejected - validation failed, or Idempotency-Key header missing
+          schema:
+            $ref: '#/definitions/models.RejectedResponse'
+        "409":
+          description: Idempotency-Key was already used with a different request
+            body
           schema:
             $ref: '#/definitions/models.RejectedResponse'
         "503":

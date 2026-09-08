@@ -41,11 +41,17 @@ Swagger UI is accessible at http://localhost:8090/swagger/index.html once the ga
 
 ### `POST /api/payments`
 
+Every `POST` requires an `Idempotency-Key` header (any client-generated
+unique string, e.g. a UUID). Retrying the exact same request with the same
+key returns the original result instead of charging the bank again; reusing
+a key with a different body is rejected with `409` - see decision.md D12.
+
 1) Odd-ending card number -> the bank authorizes it
 
 ```bash
 curl -s -X POST http://localhost:8090/api/payments \
   -H "Content-Type: application/json" \
+  -H "Idempotency-Key: 3f8e6c2a-1b1f-4e2a-9f34-7a1c2e4b9d10" \
   -d '{
 			"card_number": "2222405343248877",
 			"expiry_month": 4,
@@ -76,6 +82,7 @@ Response body:
 ```bash
 curl -s -X POST http://localhost:8090/api/payments \
   -H "Content-Type: application/json" \
+  -H "Idempotency-Key: 9c1a5e77-4d3b-4f2e-8a90-2b6f7d1c5e33" \
   -d '{
 			"card_number": "2222405343248878",
 			"expiry_month": 4,
@@ -105,6 +112,7 @@ Response body:
 ```bash
 curl -s -X POST http://localhost:8090/api/payments \
   -H "Content-Type: application/json" \
+  -H "Idempotency-Key: 7d2f4a91-6e5c-4b8a-a1d3-9f0e2c8b4a67" \
   -d '{
 			"card_number": "2222405343248870",
 			"expiry_month": 4,
@@ -118,10 +126,15 @@ Response:
 
 Response Code: `503 Service Unavailable`
 
+A `503` is never cached against its `Idempotency-Key` - retrying the same
+key (and body) once the bank recovers tries the bank again rather than
+replaying the failure.
+
 4) Invalid request -> rejected without ever calling the bank
 ```bash
 curl -s -X POST http://localhost:8090/api/payments \
   -H "Content-Type: application/json" \
+  -H "Idempotency-Key: a4b8e2c6-3d7f-4a91-b5e0-8c2f6a9d1e44" \
   -d '{
 			"card_number": "12345",
 			"expiry_month": 4,
@@ -149,9 +162,25 @@ Response body:
 Note: a `Rejected` payment request is never reached to bank, so its `id` can never be looked up here - see
 decision.md D2.
 
+5) Missing `Idempotency-Key` header -> `400`
+```bash
+{
+    "status": "Rejected",
+    "errors": ["Idempotency-Key header is required"]
+}
+```
+
+6) Same `Idempotency-Key` reused with a different request body -> `409`
+```bash
+{
+    "status": "Rejected",
+    "errors": ["Idempotency-Key was already used with a different request body"]
+}
+```
+
 ### `GET /api/payments/{id}`
 
-5) 200 OK with the stored payment (masked card number, no CVV)
+7) 200 OK with the stored payment (masked card number, no CVV)
 ```bash
 curl -s http://localhost:8090/api/payments/<id-from-a-201-response>
 
@@ -170,7 +199,7 @@ Response code: `200`
 }
 ```
 
-6) Payment ID does not exists - 404 Not Found
+8) Payment ID does not exists - 404 Not Found
 
 ```bash
 curl -s http://localhost:8090/api/payments/does-not-exist 

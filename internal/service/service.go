@@ -23,7 +23,8 @@ func New(repo *repository.PaymentsRepository, acq acquirer.Acquirer) *PaymentSer
 }
 
 func (s *PaymentService) ProcessPayment(ctx context.Context, req models.PaymentRequest) (*models.PaymentResponse, *models.RejectedResponse, error) {
-	if errs := validator.Validate(req); len(errs) > 0 {
+	errs := validator.Validate(req)
+	if len(errs) > 0 {
 		return nil, &models.RejectedResponse{
 			Status: models.StatusRejected,
 			Errors: errs,

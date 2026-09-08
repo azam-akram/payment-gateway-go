@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/repository"
 	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/service"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -105,7 +107,15 @@ func newPostHandler(fake *acquirer.MockAcquirer) (http.Handler, *repository.Paym
 	return r, repo
 }
 
+// doPostJSON issues a POST with a fresh, random Idempotency-Key so unrelated
+// test cases never collide with each other. Tests that care about key reuse
+// use doPostJSONWithKey directly.
 func doPostJSON(t *testing.T, handler http.Handler, body any) *httptest.ResponseRecorder {
+	t.Helper()
+	return doPostJSONWithKey(t, handler, body, uuid.NewString())
+}
+
+func doPostJSONWithKey(t *testing.T, handler http.Handler, body any, idempotencyKey string) *httptest.ResponseRecorder {
 	t.Helper()
 
 	raw, err := json.Marshal(body)
@@ -113,6 +123,7 @@ func doPostJSON(t *testing.T, handler http.Handler, body any) *httptest.Response
 
 	req := httptest.NewRequest(http.MethodPost, "/api/payments", bytes.NewReader(raw))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", idempotencyKey)
 
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
@@ -215,6 +226,7 @@ func TestPostPaymentHandler_Rejected_MalformedJSON(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/payments", strings.NewReader("{not valid json"))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", uuid.NewString())
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
@@ -240,4 +252,121 @@ func TestPostPaymentHandler_BankUnavailable(t *testing.T) {
 	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 	assert.Empty(t, w.Body.Bytes())
 	assert.Equal(t, 0, repo.Count())
+}
+
+func TestPostPaymentHandler_MissingIdempotencyKey(t *testing.T) {
+	fake := &acquirer.MockAcquirer{}
+	handler, repo := newPostHandler(fake)
+
+	raw, err := json.Marshal(validPaymentBody())
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/payments", bytes.NewReader(raw))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Empty(t, fake.Calls)
+	assert.Equal(t, 0, repo.Count())
+
+	var resp models.RejectedResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Contains(t, resp.Errors, "Idempotency-Key header is required")
+}
+
+func TestPostPaymentHandler_IdempotentReplay(t *testing.T) {
+	fake := &acquirer.MockAcquirer{
+		AuthorizeFunc: func(ctx context.Context, req acquirer.BankRequest) (acquirer.BankResponse, error) {
+			return acquirer.BankResponse{Authorized: true, AuthorizationCode: "auth-code"}, nil
+		},
+	}
+	handler, repo := newPostHandler(fake)
+	key := uuid.NewString()
+	body := validPaymentBody()
+
+	first := doPostJSONWithKey(t, handler, body, key)
+	second := doPostJSONWithKey(t, handler, body, key)
+
+	assert.Equal(t, http.StatusCreated, first.Code)
+	assert.Equal(t, http.StatusCreated, second.Code)
+	assert.Equal(t, first.Body.String(), second.Body.String(), "a replayed request must return the exact same response")
+	assert.Len(t, fake.Calls, 1, "the bank must only be charged once for a retried request")
+	assert.Equal(t, 1, repo.Count())
+}
+
+func TestPostPaymentHandler_IdempotencyKeyConflict(t *testing.T) {
+	fake := &acquirer.MockAcquirer{
+		AuthorizeFunc: func(ctx context.Context, req acquirer.BankRequest) (acquirer.BankResponse, error) {
+			return acquirer.BankResponse{Authorized: true, AuthorizationCode: "auth-code"}, nil
+		},
+	}
+	handler, repo := newPostHandler(fake)
+	key := uuid.NewString()
+
+	first := doPostJSONWithKey(t, handler, validPaymentBody(), key)
+	assert.Equal(t, http.StatusCreated, first.Code)
+
+	differentBody := validPaymentBody()
+	differentBody["amount"] = 999
+	second := doPostJSONWithKey(t, handler, differentBody, key)
+
+	assert.Equal(t, http.StatusConflict, second.Code)
+	assert.Len(t, fake.Calls, 1, "the bank must not be called again for a conflicting reused key")
+	assert.Equal(t, 1, repo.Count())
+
+	var resp models.RejectedResponse
+	require.NoError(t, json.Unmarshal(second.Body.Bytes(), &resp))
+	assert.Contains(t, resp.Errors, "Idempotency-Key was already used with a different request body")
+}
+
+func TestPostPaymentHandler_IdempotencyKey_RetryAfterBankUnavailable(t *testing.T) {
+	calls := 0
+	fake := &acquirer.MockAcquirer{
+		AuthorizeFunc: func(ctx context.Context, req acquirer.BankRequest) (acquirer.BankResponse, error) {
+			calls++
+			if calls == 1 {
+				return acquirer.BankResponse{}, acquirer.ErrBankUnavailable
+			}
+			return acquirer.BankResponse{Authorized: true, AuthorizationCode: "auth-code"}, nil
+		},
+	}
+	handler, repo := newPostHandler(fake)
+	key := uuid.NewString()
+	body := validPaymentBody()
+
+	first := doPostJSONWithKey(t, handler, body, key)
+	assert.Equal(t, http.StatusServiceUnavailable, first.Code)
+	assert.Equal(t, 0, repo.Count())
+
+	second := doPostJSONWithKey(t, handler, body, key)
+	assert.Equal(t, http.StatusCreated, second.Code, "a retry after a bank outage must try the bank again, not replay the failure")
+	assert.Equal(t, 1, repo.Count())
+}
+
+func TestPostPaymentHandler_IdempotencyKey_ConcurrentDuplicate(t *testing.T) {
+	fake := &acquirer.MockAcquirer{
+		AuthorizeFunc: func(ctx context.Context, req acquirer.BankRequest) (acquirer.BankResponse, error) {
+			return acquirer.BankResponse{Authorized: true, AuthorizationCode: "auth-code"}, nil
+		},
+	}
+	handler, repo := newPostHandler(fake)
+	key := uuid.NewString()
+	body := validPaymentBody()
+
+	var wg sync.WaitGroup
+	results := make([]*httptest.ResponseRecorder, 2)
+	for i := range results {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			results[i] = doPostJSONWithKey(t, handler, body, key)
+		}(i)
+	}
+	wg.Wait()
+
+	assert.Equal(t, http.StatusCreated, results[0].Code)
+	assert.Equal(t, http.StatusCreated, results[1].Code)
+	assert.Equal(t, results[0].Body.String(), results[1].Body.String())
+	assert.Len(t, fake.Calls, 1, "two concurrent requests with the same key must only reach the bank once")
+	assert.Equal(t, 1, repo.Count())
 }
