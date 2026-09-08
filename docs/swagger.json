@@ -8,16 +8,101 @@
     "host": "localhost:8090",
     "basePath": "/",
     "paths": {
-        "/ping": {
-            "get": {
+        "/api/payments": {
+            "post": {
+                "description": "Validates the request and, if valid, forwards it to the acquiring bank and persists the outcome. A request that fails validation (or isn't valid JSON) is Rejected without ever calling the bank.",
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
+                ],
+                "tags": [
+                    "payments"
+                ],
+                "summary": "Process a payment",
+                "parameters": [
+                    {
+                        "description": "Payment details",
+                        "name": "payment",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.PaymentRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Authorized or Declined",
+                        "schema": {
+                            "$ref": "#/definitions/models.PaymentResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Rejected - validation failed",
+                        "schema": {
+                            "$ref": "#/definitions/models.RejectedResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "the acquiring bank could not be reached",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/payments/{id}": {
+            "get": {
+                "description": "Retrieves a previously processed payment by id. Only Authorized/Declined payments can ever be retrieved - a Rejected request is never persisted, since the acquiring bank was never called for it.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "payments"
+                ],
+                "summary": "Retrieve a payment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Payment ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/main.Pong"
+                            "$ref": "#/definitions/models.PaymentResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "payment not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/ping": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ping"
+                ],
+                "summary": "Health check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.pong"
                         }
                     }
                 }
@@ -25,10 +110,73 @@
         }
     },
     "definitions": {
-        "main.Pong": {
+        "api.pong": {
             "type": "object",
             "properties": {
                 "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.PaymentRequest": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "integer"
+                },
+                "card_number": {
+                    "type": "string"
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "cvv": {
+                    "type": "string"
+                },
+                "expiry_month": {
+                    "type": "integer"
+                },
+                "expiry_year": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.PaymentResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "integer"
+                },
+                "card_number_last_four": {
+                    "type": "string"
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "expiry_month": {
+                    "type": "integer"
+                },
+                "expiry_year": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.RejectedResponse": {
+            "type": "object",
+            "properties": {
+                "errors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "status": {
                     "type": "string"
                 }
             }

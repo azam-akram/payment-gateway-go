@@ -1,16 +1,114 @@
 basePath: /
 definitions:
-  main.Pong:
+  api.pong:
     properties:
       message:
         type: string
     type: object
-host: localhost:8089
+  models.PaymentRequest:
+    properties:
+      amount:
+        type: integer
+      card_number:
+        type: string
+      currency:
+        type: string
+      cvv:
+        type: string
+      expiry_month:
+        type: integer
+      expiry_year:
+        type: integer
+    type: object
+  models.PaymentResponse:
+    properties:
+      amount:
+        type: integer
+      card_number_last_four:
+        type: string
+      currency:
+        type: string
+      expiry_month:
+        type: integer
+      expiry_year:
+        type: integer
+      id:
+        type: string
+      status:
+        type: string
+    type: object
+  models.RejectedResponse:
+    properties:
+      errors:
+        items:
+          type: string
+        type: array
+      status:
+        type: string
+    type: object
+host: localhost:8090
 info:
   contact: {}
   description: Interview challenge for building a Payment Gateway - Go version
   title: Payment Gateway Challenge Go
 paths:
+  /api/payments:
+    post:
+      consumes:
+      - application/json
+      description: Validates the request and, if valid, forwards it to the acquiring
+        bank and persists the outcome. A request that fails validation (or isn't valid
+        JSON) is Rejected without ever calling the bank.
+      parameters:
+      - description: Payment details
+        in: body
+        name: payment
+        required: true
+        schema:
+          $ref: '#/definitions/models.PaymentRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Authorized or Declined
+          schema:
+            $ref: '#/definitions/models.PaymentResponse'
+        "400":
+          description: Rejected - validation failed
+          schema:
+            $ref: '#/definitions/models.RejectedResponse'
+        "503":
+          description: the acquiring bank could not be reached
+          schema:
+            type: string
+      summary: Process a payment
+      tags:
+      - payments
+  /api/payments/{id}:
+    get:
+      description: Retrieves a previously processed payment by id. Only Authorized/Declined
+        payments can ever be retrieved - a Rejected request is never persisted, since
+        the acquiring bank was never called for it.
+      parameters:
+      - description: Payment ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.PaymentResponse'
+        "404":
+          description: payment not found
+          schema:
+            type: string
+      summary: Retrieve a payment
+      tags:
+      - payments
   /ping:
     get:
       produces:
@@ -19,7 +117,10 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/main.Pong'
+            $ref: '#/definitions/api.pong'
+      summary: Health check
+      tags:
+      - ping
 securityDefinitions:
   BasicAuth:
     type: basic
