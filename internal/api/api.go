@@ -26,7 +26,7 @@ func New() *Api {
 	a := &Api{}
 
 	repo := repository.NewPaymentsRepository()
-	acq := acquirer.NewHTTPAcquirer(bankSimulatorURL())
+	acq := acquirer.NewRetryingAcquirer(acquirer.NewHTTPAcquirer(bankSimulatorURL()), acquirer.DefaultRetryConfig)
 	a.paymentsSvc = service.New(repo, acq)
 
 	a.setupRouter()

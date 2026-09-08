@@ -10,7 +10,7 @@
     "paths": {
         "/api/payments": {
             "post": {
-                "description": "Validates the request and, if valid, forwards it to the acquiring bank and persists the outcome. A request that fails validation (or isn't valid JSON) is Rejected without ever calling the bank. Requires an Idempotency-Key header; retrying the same key and body replays the original result instead of charging the bank again.",
+                "description": "Validates the request and, if valid, forwards it to the acquiring bank and persists the outcome. A request that fails validation (or isn't valid JSON) is Rejected without ever calling the bank. The bank call is retried up to 3 times with backoff before failing. Requires an Idempotency-Key header; retrying the same key and body replays the original result instead of charging the bank again.",
                 "consumes": [
                     "application/json"
                 ],
@@ -59,7 +59,7 @@
                         }
                     },
                     "503": {
-                        "description": "the acquiring bank could not be reached",
+                        "description": "the acquiring bank could not be reached after retries",
                         "schema": {
                             "type": "string"
                         }

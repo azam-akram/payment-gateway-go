@@ -44,7 +44,7 @@ Swagger UI is accessible at http://localhost:8090/swagger/index.html once the ga
 Every `POST` requires an `Idempotency-Key` header (any client-generated
 unique string, e.g. a UUID). Retrying the exact same request with the same
 key returns the original result instead of charging the bank again; reusing
-a key with a different body is rejected with `409` - see decision.md D12.
+a key with a different body is rejected with `409`.
 
 1) Odd-ending card number -> the bank authorizes it
 
@@ -108,7 +108,7 @@ Response body:
 }
 ```
 
-3) Zero-ending card number -> the bank simulator is unreachable (503)
+3) Zero-ending card number -> the bank simulator is unreachable (503, after retries)
 ```bash
 curl -s -X POST http://localhost:8090/api/payments \
   -H "Content-Type: application/json" \
@@ -125,6 +125,10 @@ curl -s -X POST http://localhost:8090/api/payments \
 Response:
 
 Response Code: `503 Service Unavailable`
+
+Before returning this, the gateway retries the bank call up to 3 times
+total with jittered backoff - a `503` here means the bank
+was unreachable across all attempts, not just once.
 
 A `503` is never cached against its `Idempotency-Key` - retrying the same
 key (and body) once the bank recovers tries the bank again rather than
@@ -159,8 +163,7 @@ Response body:
 }
 ```
 
-Note: a `Rejected` payment request is never reached to bank, so its `id` can never be looked up here - see
-decision.md D2.
+Note: a `Rejected` payment request is never reached to bank, so its `id` can never be looked up here.
 
 5) Missing `Idempotency-Key` header -> `400`
 ```bash
