@@ -31,7 +31,7 @@ func TestGetPaymentHandler(t *testing.T) {
 	}
 	ps := repository.NewPaymentsRepository()
 	ps.AddPayment(payment)
-	svc := service.New(ps, &acquirer.FakeAcquirer{})
+	svc := service.New(ps, &acquirer.MockAcquirer{})
 
 	payments := NewPaymentsHandler(svc)
 
@@ -95,7 +95,7 @@ func validPaymentBody() map[string]any {
 
 // newPostHandler builds a router serving only PostHandler, backed by a
 // fresh in-memory repository and the given fake acquirer.
-func newPostHandler(fake *acquirer.FakeAcquirer) (http.Handler, *repository.PaymentsRepository) {
+func newPostHandler(fake *acquirer.MockAcquirer) (http.Handler, *repository.PaymentsRepository) {
 	repo := repository.NewPaymentsRepository()
 	svc := service.New(repo, fake)
 	h := NewPaymentsHandler(svc)
@@ -120,7 +120,7 @@ func doPostJSON(t *testing.T, handler http.Handler, body any) *httptest.Response
 }
 
 func TestPostPaymentHandler_Authorized(t *testing.T) {
-	fake := &acquirer.FakeAcquirer{
+	fake := &acquirer.MockAcquirer{
 		AuthorizeFunc: func(ctx context.Context, req acquirer.BankRequest) (acquirer.BankResponse, error) {
 			return acquirer.BankResponse{Authorized: true, AuthorizationCode: "auth-code"}, nil
 		},
@@ -140,7 +140,7 @@ func TestPostPaymentHandler_Authorized(t *testing.T) {
 }
 
 func TestPostPaymentHandler_Declined(t *testing.T) {
-	fake := &acquirer.FakeAcquirer{
+	fake := &acquirer.MockAcquirer{
 		AuthorizeFunc: func(ctx context.Context, req acquirer.BankRequest) (acquirer.BankResponse, error) {
 			return acquirer.BankResponse{Authorized: false}, nil
 		},
@@ -158,7 +158,7 @@ func TestPostPaymentHandler_Declined(t *testing.T) {
 }
 
 func TestPostPaymentHandler_Rejected_InvalidCardNumber(t *testing.T) {
-	fake := &acquirer.FakeAcquirer{}
+	fake := &acquirer.MockAcquirer{}
 	handler, repo := newPostHandler(fake)
 
 	body := validPaymentBody()
@@ -177,7 +177,7 @@ func TestPostPaymentHandler_Rejected_InvalidCardNumber(t *testing.T) {
 }
 
 func TestPostPaymentHandler_Rejected_InvalidCurrency(t *testing.T) {
-	fake := &acquirer.FakeAcquirer{}
+	fake := &acquirer.MockAcquirer{}
 	handler, _ := newPostHandler(fake)
 
 	body := validPaymentBody()
@@ -194,7 +194,7 @@ func TestPostPaymentHandler_Rejected_InvalidCurrency(t *testing.T) {
 }
 
 func TestPostPaymentHandler_Rejected_MissingField(t *testing.T) {
-	fake := &acquirer.FakeAcquirer{}
+	fake := &acquirer.MockAcquirer{}
 	handler, _ := newPostHandler(fake)
 
 	body := validPaymentBody()
@@ -210,7 +210,7 @@ func TestPostPaymentHandler_Rejected_MissingField(t *testing.T) {
 }
 
 func TestPostPaymentHandler_Rejected_MalformedJSON(t *testing.T) {
-	fake := &acquirer.FakeAcquirer{}
+	fake := &acquirer.MockAcquirer{}
 	handler, repo := newPostHandler(fake)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/payments", strings.NewReader("{not valid json"))
@@ -228,7 +228,7 @@ func TestPostPaymentHandler_Rejected_MalformedJSON(t *testing.T) {
 }
 
 func TestPostPaymentHandler_BankUnavailable(t *testing.T) {
-	fake := &acquirer.FakeAcquirer{
+	fake := &acquirer.MockAcquirer{
 		AuthorizeFunc: func(ctx context.Context, req acquirer.BankRequest) (acquirer.BankResponse, error) {
 			return acquirer.BankResponse{}, acquirer.ErrBankUnavailable
 		},
