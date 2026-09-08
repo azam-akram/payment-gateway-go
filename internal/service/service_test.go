@@ -28,7 +28,7 @@ func validRequest() models.PaymentRequest {
 
 func TestProcessPayment_Authorized(t *testing.T) {
 	repo := repository.NewPaymentsRepository()
-	fake := &acquirer.FakeAcquirer{
+	fake := &acquirer.MockAcquirer{
 		AuthorizeFunc: func(ctx context.Context, req acquirer.BankRequest) (acquirer.BankResponse, error) {
 			return acquirer.BankResponse{Authorized: true, AuthorizationCode: "auth-code"}, nil
 		},
@@ -54,7 +54,7 @@ func TestProcessPayment_Authorized(t *testing.T) {
 
 func TestProcessPayment_Declined(t *testing.T) {
 	repo := repository.NewPaymentsRepository()
-	fake := &acquirer.FakeAcquirer{
+	fake := &acquirer.MockAcquirer{
 		AuthorizeFunc: func(ctx context.Context, req acquirer.BankRequest) (acquirer.BankResponse, error) {
 			return acquirer.BankResponse{Authorized: false}, nil
 		},
@@ -73,7 +73,7 @@ func TestProcessPayment_Declined(t *testing.T) {
 
 func TestProcessPayment_BankRequest_ExpiryDateFormattedMMYYYY(t *testing.T) {
 	repo := repository.NewPaymentsRepository()
-	fake := &acquirer.FakeAcquirer{}
+	fake := &acquirer.MockAcquirer{}
 	svc := New(repo, fake)
 
 	req := validRequest()
@@ -89,7 +89,7 @@ func TestProcessPayment_BankRequest_ExpiryDateFormattedMMYYYY(t *testing.T) {
 
 func TestProcessPayment_InvalidRequest_RejectedWithoutCallingAcquirer(t *testing.T) {
 	repo := repository.NewPaymentsRepository()
-	fake := &acquirer.FakeAcquirer{}
+	fake := &acquirer.MockAcquirer{}
 	svc := New(repo, fake)
 
 	req := validRequest()
@@ -110,7 +110,7 @@ func TestProcessPayment_InvalidRequest_RejectedWithoutCallingAcquirer(t *testing
 
 func TestProcessPayment_BankUnavailable_NothingPersisted(t *testing.T) {
 	repo := repository.NewPaymentsRepository()
-	fake := &acquirer.FakeAcquirer{
+	fake := &acquirer.MockAcquirer{
 		AuthorizeFunc: func(ctx context.Context, req acquirer.BankRequest) (acquirer.BankResponse, error) {
 			return acquirer.BankResponse{}, acquirer.ErrBankUnavailable
 		},
@@ -130,7 +130,7 @@ func TestProcessPayment_BankUnavailable_NothingPersisted(t *testing.T) {
 
 func TestGetPayment_Found(t *testing.T) {
 	repo := repository.NewPaymentsRepository()
-	svc := New(repo, &acquirer.FakeAcquirer{})
+	svc := New(repo, &acquirer.MockAcquirer{})
 
 	stored := models.PaymentResponse{Id: "abc-123", Status: models.StatusAuthorized, CardNumberLastFour: "1234"}
 	repo.AddPayment(stored)
@@ -144,7 +144,7 @@ func TestGetPayment_Found(t *testing.T) {
 
 func TestGetPayment_NotFound(t *testing.T) {
 	repo := repository.NewPaymentsRepository()
-	svc := New(repo, &acquirer.FakeAcquirer{})
+	svc := New(repo, &acquirer.MockAcquirer{})
 
 	payment, found := svc.GetPayment("does-not-exist")
 
