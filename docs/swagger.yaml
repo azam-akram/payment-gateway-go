@@ -1,0 +1,26 @@
+basePath: /
+definitions:
+  main.Pong:
+    properties:
+      message:
+        type: string
+    type: object
+host: localhost:8089
+info:
+  contact: {}
+  description: Interview challenge for building a Payment Gateway - Go version
+  title: Payment Gateway Challenge Go
+paths:
+  /ping:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Pong'
+securityDefinitions:
+  BasicAuth:
+    type: basic
+swagger: "2.0"

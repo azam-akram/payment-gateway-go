@@ -1,0 +1,42 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "Interview challenge for building a Payment Gateway - Go version",
+        "title": "Payment Gateway Challenge Go",
+        "contact": {}
+    },
+    "host": "localhost:8090",
+    "basePath": "/",
+    "paths": {
+        "/ping": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/main.Pong"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "main.Pong": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                }
+            }
+        }
+    },
+    "securityDefinitions": {
+        "BasicAuth": {
+            "type": "basic"
+        }
+    }
+}
