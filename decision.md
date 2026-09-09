@@ -182,9 +182,7 @@ What it deliberately does *not* retry:
 Why a decorator instead of putting the loop inside `HTTPAcquirer`: keeps
 `HTTPAcquirer` doing exactly one thing (one HTTP call, mapped to the
 package's error contract), keeps the retry policy unit-testable against a
-fake `Acquirer` with no HTTP involved (`retry_test.go`), and follows the
-same "wrap the interface, don't grow the concrete type" shape as D7 already
-established.
+mock `Acquirer` with no HTTP involved (`retry_test.go`).
 
 Why full jitter over fixed exponential backoff: with fixed delays, every
 replica retrying a struggling bank at once re-synchronizes into further
@@ -210,7 +208,7 @@ caps how much damage one struggling bank call can do to a single request.
 
 ## 5. Future considerations: reliability & scalability (out of scope here)
 
-This exercise deliberately left out a real database (see §1, D11) to avoid
+This exercise deliberately left out a real database (D11) to avoid
 over-engineering a take-home. Idempotency keys (D10) and bank-call retry
 (D11) are handled, but both only within a single process - taking this from
 an exercise to a production gateway would mean revisiting the rest of these

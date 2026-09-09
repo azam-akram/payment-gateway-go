@@ -1,8 +1,9 @@
+package idempotency
+
 // Package idempotency lets the payments API guarantee that a request
 // carrying an Idempotency-Key is only ever charged to the acquiring bank
 // once, even if the client retries it (e.g. after a timeout) or two copies
 // of it arrive concurrently. See decision.md D12.
-package idempotency
 
 import (
 	"crypto/sha256"
@@ -21,7 +22,7 @@ type Record struct {
 // Store serializes and caches responses per idempotency key, within a
 // single process. It does not survive a restart and does not coordinate
 // across replicas - the same limitation the in-memory payments repository
-// already has (decision.md D6, §7).
+// already has.
 type Store struct {
 	mu      sync.Mutex
 	locks   map[string]*sync.Mutex

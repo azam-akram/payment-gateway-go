@@ -12,7 +12,7 @@ import (
 )
 
 // idempotencyKeyHeader is required on every POST /api/payments so a retried
-// or duplicated request never charges the bank twice - see decision.md D12.
+// or duplicated request never charges the bank twice.
 const idempotencyKeyHeader = "Idempotency-Key"
 
 type PaymentsHandler struct {
@@ -97,13 +97,8 @@ func (h *PaymentsHandler) PostHandler() http.HandlerFunc {
 		payment, rejected, err := h.service.ProcessPayment(r.Context(), req)
 		switch {
 		case err != nil:
-			// Bank unavailable: the outcome is unknown, so it must not be
-			// cached - a retry with the same key should try the bank again.
 			w.WriteHeader(http.StatusServiceUnavailable)
 		case rejected != nil:
-			// Validation failed before the bank was ever called: cheap to
-			// redo, so it isn't cached either - a corrected retry with the
-			// same key should be validated fresh, not replayed.
 			writeJSON(w, http.StatusBadRequest, rejected)
 		default:
 			respBody, err := json.Marshal(payment)
