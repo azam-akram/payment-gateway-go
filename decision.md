@@ -231,11 +231,22 @@ dependency for this exercise wasn't justified - the same reasoning as D5's
 ### D13 - Containerized packaging + CI
 
 Added a multi-stage `Dockerfile` (Go build stage, small Alpine runtime,
-non-root user, `HEALTHCHECK` against `/ping`) and wired a `payment_gateway`
-service into `docker-compose.yml` alongside the bank simulator, so
-`docker-compose up --build` runs the full stack on one Docker network - the
-gateway reaching the bank simulator by container name rather than
-`localhost`.
+non-root user) and wired a `payment_gateway` service into
+`docker-compose.yml` alongside the bank simulator, so `docker-compose up
+--build` runs the full stack on one Docker network - the gateway reaching
+the bank simulator by container name rather than `localhost`.
+
+Kept deliberately minimal otherwise - left out `ca-certificates` (the
+gateway only calls the bank simulator over plain HTTP in this exercise, no
+outbound TLS today), a `HEALTHCHECK` (redundant with the health-check
+configuration of whatever's actually running the container - Coolify,
+Compose, Kubernetes - rather than Docker's own), and baking the git
+commit/build date into the binary (the image tag already carries the
+version; the extra `-ldflags` plumbing wasn't earning its keep for two log
+fields nothing depends on). The non-root user stays despite that trim -
+unlike those, it's a real security property for a payment gateway, not just
+informational, and it's free: `addgroup`/`adduser` are already in the base
+Alpine image, no extra package needed.
 
 `.github/workflows/ci.yml` runs `go vet`, `go build`, `go test -race
 -cover`, `golangci-lint`, and a Docker build on every push/PR, so a broken
@@ -246,8 +257,8 @@ at review time.
 `v*` tag to publish binaries as GitHub Release assets, then builds and
 pushes the Docker image to GHCR (`ghcr.io/azam-akram/payment-gateway-go`)
 tagged with both the release version and `latest` - the same binary that
-passed CI is what gets shipped, with version/commit/date baked in via
-`-ldflags` either way.
+passed CI is what gets shipped, with the version baked in via `-ldflags`
+either way.
 
 ## 5. Future considerations: reliability & scalability (out of scope here)
 

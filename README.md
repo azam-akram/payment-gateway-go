@@ -249,10 +249,10 @@ Log verbosity is controlled by the `LOG_LEVEL` environment variable
 
 ## Packaging & CI
 
-- **[Dockerfile](Dockerfile)** - multi-stage build producing a small
-  non-root image, with a `HEALTHCHECK` against `/ping`. Build-time
-  `VERSION`/`COMMIT`/`BUILD_DATE` args are injected into the binary the same
-  way `go build -ldflags` does locally.
+- **[Dockerfile](Dockerfile)** - multi-stage build producing a small image.
+  The build-time `VERSION` arg is injected into the binary the same way
+  `go build -ldflags` does locally. Kept deliberately minimal - see
+  [decision.md](decision.md) D13 for what was left out and why.
 - **[.github/workflows/ci.yml](.github/workflows/ci.yml)** - runs on every
   push/PR to `master`: `go vet`, `go build`, `go test -race -cover`,
   `golangci-lint`, and a Docker build to catch a broken `Dockerfile` early.
