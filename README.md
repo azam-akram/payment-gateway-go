@@ -1,15 +1,19 @@
 # Payment Gateway (Go)
 
+[![CI](https://github.com/azam-akram/payment-gateway-go/actions/workflows/ci.yml/badge.svg)](https://github.com/azam-akram/payment-gateway-go/actions/workflows/ci.yml)
+
 Implementation of the CKO Payment Gateway take-home challenge. 
 
 Please see [decision.md](decision.md) for the architecture and design rationale.
 
 ## Running the gateway
 
+### Option A: go run + docker-compose for the bank simulator only
+
 starts the bank simulator on localhost:8080
 
 ```bash
-docker-compose up -d
+docker-compose up -d bank_simulator
 ```
 
 starts the payment gateway on localhost:8090
@@ -20,8 +24,19 @@ go run main.go
 once the gateway is up, `GET http://localhost:8090/ping` should return `{"message":"pong"}`.
 
 The bank simulator's base URL can be overridden with the
-`BANK_SIMULATOR_URL` environment variable. The defaults value is `http://localhost:8080`, which
+`BANK_SIMULATOR_URL` environment variable. The default value is `http://localhost:8080`, which
 matches `docker-compose.yml`.
+
+### Option B: full stack via docker-compose
+
+Builds the gateway from the [Dockerfile](Dockerfile) and runs it alongside the bank simulator,
+both on the same Docker network:
+
+```bash
+docker-compose up --build
+```
+
+The gateway is reachable at `http://localhost:8090`, same as Option A.
 
 ## Running tests
 
@@ -216,3 +231,32 @@ Response Code: `404 Not Found`
 
 ### Swagger
 This template uses Swaggo to autodocument the API and create a Swagger spec. The Swagger UI is available at http://localhost:8090/swagger/index.html.
+
+## Logging
+
+The gateway logs structured JSON to stdout via `log/slog` - one line per HTTP
+request (method, path, status, duration), plus lines for payment outcomes,
+bank retries, and idempotency conflicts. Every line logged while handling a
+request is stamped with `request_id`, so all the lines for one request -
+across the handler, service and acquirer retry logic - can be correlated by
+grepping that field. The `request_id` is also echoed back to the client as
+the `X-Request-Id` response header.
+
+The card number and CVV are never logged (see [decision.md](decision.md) D4).
+
+Log verbosity is controlled by the `LOG_LEVEL` environment variable
+(`debug`/`info`/`warn`/`error`, default `info`).
+
+## Packaging & CI
+
+- **[Dockerfile](Dockerfile)** - multi-stage build producing a small
+  non-root image, with a `HEALTHCHECK` against `/ping`. Build-time
+  `VERSION`/`COMMIT`/`BUILD_DATE` args are injected into the binary the same
+  way `go build -ldflags` does locally.
+- **[.github/workflows/ci.yml](.github/workflows/ci.yml)** - runs on every
+  push/PR to `master`: `go vet`, `go build`, `go test -race -cover`,
+  `golangci-lint`, and a Docker build to catch a broken `Dockerfile` early.
+- **[.github/workflows/release.yml](.github/workflows/release.yml)** - on a
+  `v*` tag, runs [GoReleaser](.goreleaser.yml) to publish cross-platform
+  binaries as GitHub Release assets, then builds and pushes the Docker image
+  to `ghcr.io/azam-akram/payment-gateway-go`.

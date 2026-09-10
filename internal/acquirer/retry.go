@@ -3,6 +3,7 @@ package acquirer
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"math/rand"
 	"time"
 )
@@ -33,7 +34,14 @@ func (r *RetryingAcquirer) Authorize(ctx context.Context, req BankRequest) (Bank
 
 	for attempt := 1; attempt <= r.config.MaxAttempts; attempt++ {
 		if attempt > 1 {
-			if err := sleep(ctx, backoff(r.config, attempt)); err != nil {
+			delay := backoff(r.config, attempt)
+			slog.WarnContext(ctx, "retrying bank authorization",
+				"attempt", attempt,
+				"max_attempts", r.config.MaxAttempts,
+				"delay_ms", delay.Milliseconds(),
+				"error", lastErr,
+			)
+			if err := sleep(ctx, delay); err != nil {
 				return BankResponse{}, lastErr
 			}
 		}
@@ -48,6 +56,10 @@ func (r *RetryingAcquirer) Authorize(ctx context.Context, req BankRequest) (Bank
 		lastErr = err
 	}
 
+	slog.ErrorContext(ctx, "bank unavailable after all retry attempts",
+		"max_attempts", r.config.MaxAttempts,
+		"error", lastErr,
+	)
 	return BankResponse{}, lastErr
 }
 

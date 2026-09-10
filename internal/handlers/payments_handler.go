@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 
 	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/idempotency"
@@ -36,6 +37,7 @@ func (h *PaymentsHandler) GetHandler() http.HandlerFunc {
 
 		payment, found := h.service.GetPayment(id)
 		if !found {
+			slog.InfoContext(r.Context(), "payment not found", "payment_id", id)
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -48,6 +50,7 @@ func (h *PaymentsHandler) PostHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		key := r.Header.Get(idempotencyKeyHeader)
 		if key == "" {
+			slog.WarnContext(r.Context(), "payment rejected: missing idempotency key")
 			writeJSON(w, http.StatusBadRequest, models.RejectedResponse{
 				Status: models.StatusRejected,
 				Errors: []string{idempotencyKeyHeader + " header is required"},
@@ -73,6 +76,7 @@ func (h *PaymentsHandler) PostHandler() http.HandlerFunc {
 
 		if rec, ok := h.idempotency.Get(key); ok {
 			if rec.RequestHash != bodyHash {
+				slog.WarnContext(r.Context(), "idempotency key conflict", "idempotency_key", key)
 				writeJSON(w, http.StatusConflict, models.RejectedResponse{
 					Status: models.StatusRejected,
 					Errors: []string{idempotencyKeyHeader + " was already used with a different request body"},
@@ -81,7 +85,7 @@ func (h *PaymentsHandler) PostHandler() http.HandlerFunc {
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(rec.StatusCode)
-			w.Write(rec.Body)
+			_, _ = w.Write(rec.Body)
 			return
 		}
 
@@ -113,7 +117,7 @@ func (h *PaymentsHandler) PostHandler() http.HandlerFunc {
 			})
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
-			w.Write(respBody)
+			_, _ = w.Write(respBody)
 		}
 	}
 }

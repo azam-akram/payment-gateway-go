@@ -63,7 +63,7 @@ func (a *HTTPAcquirer) Authorize(ctx context.Context, req BankRequest) (BankResp
 	if err != nil {
 		return BankResponse{}, fmt.Errorf("%w: %v", ErrBankUnavailable, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return BankResponse{}, fmt.Errorf("%w: bank returned status %d", ErrBankUnavailable, resp.StatusCode)

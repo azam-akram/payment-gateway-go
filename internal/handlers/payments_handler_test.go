@@ -40,15 +40,6 @@ func TestGetPaymentHandler(t *testing.T) {
 	r := chi.NewRouter()
 	r.Get("/api/payments/{id}", payments.GetHandler())
 
-	httpServer := &http.Server{
-		Addr:    ":8091",
-		Handler: r,
-	}
-
-	go func() error {
-		return httpServer.ListenAndServe()
-	}()
-
 	t.Run("PaymentFound", func(t *testing.T) {
 		// Create a new HTTP request for testing
 		req, _ := http.NewRequest("GET", "/api/payments/test-id", nil)

@@ -1,0 +1,9 @@
+.git
+.github
+.vscode
+dist
+*.md
+imposters
+docker-compose.yml
+.goreleaser.yml
+.editorconfig

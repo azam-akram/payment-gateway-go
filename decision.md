@@ -206,6 +206,49 @@ is a known gap rather than a solved one. No circuit breaker either - out of
 scope for now, and 3 bounded attempts with a 5s per-attempt timeout already
 caps how much damage one struggling bank call can do to a single request.
 
+### D12 - Structured logging with per-request correlation
+
+Replaced the `fmt.Printf` calls scattered across `main.go`/`internal/api`
+with `log/slog`, writing structured JSON to stdout. `internal/logging` wraps
+the base JSON handler so any line logged while handling an HTTP request -
+across the handler, service and the acquirer's retry loop - is automatically
+stamped with `request_id` (chi's per-request ID), without every call site
+having to look it up itself. The same ID is echoed back as the
+`X-Request-Id` response header, so a caller reporting an issue can hand back
+one ID that ties their request to every log line it produced.
+
+What gets logged: one line per HTTP request (method, path, status,
+duration), payment outcomes (`payment_id`, `status`, `currency`, `amount` -
+never the card number or CVV, per D4), validation rejections, idempotency
+conflicts, and bank retry attempts/exhaustion. Verbosity is controlled by
+`LOG_LEVEL` (default `info`).
+
+Why `log/slog` over a third-party logger (zap, zerolog): it's in the
+standard library as of Go 1.21, structured and reasonably fast, and adding a
+dependency for this exercise wasn't justified - the same reasoning as D5's
+"could've used `crypto/rand`" trade-off.
+
+### D13 - Containerized packaging + CI
+
+Added a multi-stage `Dockerfile` (Go build stage, small Alpine runtime,
+non-root user, `HEALTHCHECK` against `/ping`) and wired a `payment_gateway`
+service into `docker-compose.yml` alongside the bank simulator, so
+`docker-compose up --build` runs the full stack on one Docker network - the
+gateway reaching the bank simulator by container name rather than
+`localhost`.
+
+`.github/workflows/ci.yml` runs `go vet`, `go build`, `go test -race
+-cover`, `golangci-lint`, and a Docker build on every push/PR, so a broken
+build, a data race, or a lint regression is caught before merge rather than
+at review time.
+
+`.github/workflows/release.yml` runs the existing `.goreleaser.yml` on a
+`v*` tag to publish binaries as GitHub Release assets, then builds and
+pushes the Docker image to GHCR (`ghcr.io/azam-akram/payment-gateway-go`)
+tagged with both the release version and `latest` - the same binary that
+passed CI is what gets shipped, with version/commit/date baked in via
+`-ldflags` either way.
+
 ## 5. Future considerations: reliability & scalability (out of scope here)
 
 This exercise deliberately left out a real database (D11) to avoid

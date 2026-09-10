@@ -12,4 +12,15 @@ services:
       - type: bind
         source: ./imposters
         target: /imposters
-      
+
+  payment_gateway:
+    container_name: payment_gateway
+    build:
+      context: .
+    ports:
+      - "8090:8090"
+    environment:
+      BANK_SIMULATOR_URL: http://bank_simulator:8080
+      LOG_LEVEL: info
+    depends_on:
+      - bank_simulator

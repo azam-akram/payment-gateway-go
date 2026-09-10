@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/google/uuid"
 
@@ -25,6 +26,7 @@ func New(repo *repository.PaymentsRepository, acq acquirer.Acquirer) *PaymentSer
 func (s *PaymentService) ProcessPayment(ctx context.Context, req models.PaymentRequest) (*models.PaymentResponse, *models.RejectedResponse, error) {
 	errs := validator.Validate(req)
 	if len(errs) > 0 {
+		slog.InfoContext(ctx, "payment rejected", "errors", errs)
 		return nil, &models.RejectedResponse{
 			Status: models.StatusRejected,
 			Errors: errs,
@@ -41,6 +43,7 @@ func (s *PaymentService) ProcessPayment(ctx context.Context, req models.PaymentR
 
 	bankResp, err := s.acquirer.Authorize(ctx, bankRequest)
 	if err != nil {
+		slog.ErrorContext(ctx, "bank authorization failed", "error", err)
 		return nil, nil, err
 	}
 
@@ -59,6 +62,15 @@ func (s *PaymentService) ProcessPayment(ctx context.Context, req models.PaymentR
 		Amount:             req.Amount,
 	}
 	s.repo.AddPayment(payment)
+
+	// Never log the card number or CVV, only the derived, non-sensitive
+	// fields already present on the response (see decision.md D4).
+	slog.InfoContext(ctx, "payment processed",
+		"payment_id", payment.Id,
+		"status", payment.Status,
+		"currency", payment.Currency,
+		"amount", payment.Amount,
+	)
 
 	return &payment, nil, nil
 }
