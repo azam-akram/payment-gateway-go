@@ -1,6 +1,6 @@
 # Payment Gateway - Architecture Decisions
 
-Notes on how I approached this and why. Not every trivial choice is written
+Notes on how I approached this and why. Not every easier choice is written
 down here, just the ones I expect to have to defend or that someone picking
 up this code later would wonder about.
 
@@ -24,7 +24,7 @@ retry with backoff on the bank call were added later.
 ## 2. Data type change for CardNumberLastFour and Cvv
 
 `internal/models/payment.go` had `CardNumberLastFour` and `Cvv` typed as
-`int`. That's a real bug, not a style nit - `int` silently eats a leading
+`int`. That was a real issue, `int` silently trims a leading
 zero, so a CVV of `012` turns into `12`. Both need to be strings.
 
 ## 3. Architecture overview
@@ -40,6 +40,7 @@ HTTP (chi router)
           -> repository       (in-memory store, provided test double)
 ```
 
+### Separation of Concerns (SoC)
 The existing CKO code has the handler talking directly to the repository. I split out
 a `service` package because `POST` actually has three jobs - validate, call
 an external system, persist - and none of that is really an HTTP concern.
@@ -74,19 +75,12 @@ ISO 4217 table, as mentioned in requirement.
 
 ### D4 - Never persist or log the full PAN or CVV
 
-The domain/response models only ever hold the last four digits of the card
+The response models only ever hold the last four digits of the card
 number. The full PAN and CVV exist only transiently, while validating and
 making the outbound call to the bank simulator - never written to the
 repository or logged.
 
-### D5 - Payment IDs are UUIDv4
-
-Using `google/uuid` to generate the `Id`, could've done it with
-`crypto/rand` and zero new deps, but UUIDv4 is the unambiguous
-choice, and the spec explicitly allows "whatever format... e.g. a GUID is
-fine".
-
-### D6 - Keep the in-memory repository, but make it concurrency-safe
+### D5 - Keep the in-memory repository, but make it concurrency-safe
 
 Keeping the provided repository as instructed, no real DB - but backing it
 with a `map[string]Payment` guarded by `sync.RWMutex` instead of the
@@ -94,7 +88,7 @@ original unsynchronized slice scan. `net/http` serves requests concurrently
 by default, so the unlocked slice is a genuine data race (`go test -race`
 flags it).
 
-### D7 - Bank simulator client as a small interface
+### D6 - Bank simulator client as a small interface
 
 One small interface: `Acquirer.Authorize(ctx, BankRequest) (BankResponse,
 error)`. The real version calls the bank simulator over HTTP
@@ -106,7 +100,7 @@ a `Repository` interface) - nothing else here needs to be swapped or
 mocked.
 
 
-### D8 - How to handle a bank that can't be reached (503 / timeout)
+### D7 - How to handle a bank that can't be reached (503 / timeout)
 
 If the bank simulator returns `503` or the call times out or fails at the
 transport level, that's neither `Declined` (would misreport a real decline)
@@ -121,7 +115,7 @@ status for it felt worse than surfacing the failure honestly. Explicitly not
 doing retries/backoff here - out of scope, not required, and it would add
 complexity the task doesn't call for.
 
-### D9 - HTTP status code mapping
+### D8 - HTTP status code mapping
 
 | Outcome | HTTP status |
 |---|---|
@@ -131,7 +125,7 @@ complexity the task doesn't call for.
 | GET, payment found | `200 OK` |
 | GET, payment not found | `404 Not Found` (fixes a bug in the original scaffold) |
 
-### D10 - Idempotency-Key required on POST /api/payments
+### D9 - Idempotency-Key required on POST /api/payments
 
 `POST /api/payments` requires an `Idempotency-Key` header. `internal/idempotency`
 keeps a per-key lock plus a cache of completed responses, both in-process:
@@ -161,7 +155,7 @@ both could see "no cached response yet" and both call the bank. The lock
 serializes them so the second one waits for the first's result instead of
 racing it.
 
-### D11 - retry with backoff around the acquiring bank call
+### D10 - retry with backoff around the acquiring bank call
 
 `internal/acquirer/retry.go` adds `RetryingAcquirer`, a decorator wrapping
 any `Acquirer`, and it's what actually gets wired up in
@@ -189,7 +183,7 @@ replica retrying a struggling bank at once re-synchronizes into further
 simultaneous bursts (thundering herd) - full jitter (a random delay in
 `[0, backoff]` rather than exactly `backoff`) spreads retries out instead.
 
-**Interaction with D10:** the idempotency lock for a key is held for the
+**Interaction with D9:** the idempotency lock for a key is held for the
 entire `ProcessPayment` call, so all the retry's internal attempts happen as
 one logical attempt from the idempotency store's point of view - a
 concurrent duplicate request still just waits for the whole thing (retries
@@ -206,7 +200,7 @@ is a known gap rather than a solved one. No circuit breaker either - out of
 scope for now, and 3 bounded attempts with a 5s per-attempt timeout already
 caps how much damage one struggling bank call can do to a single request.
 
-### D12 - Structured logging with per-request correlation
+### D11 - Structured logging with per-request correlation
 
 Replaced the `fmt.Printf` calls scattered across `main.go`/`internal/api`
 with `log/slog`, writing structured JSON to stdout. `internal/logging` wraps
@@ -225,10 +219,9 @@ conflicts, and bank retry attempts/exhaustion. Verbosity is controlled by
 
 Why `log/slog` over a third-party logger (zap, zerolog): it's in the
 standard library as of Go 1.21, structured and reasonably fast, and adding a
-dependency for this exercise wasn't justified - the same reasoning as D5's
-"could've used `crypto/rand`" trade-off.
+dependency for this exercise wasn't justified.
 
-### D13 - Containerized packaging + CI
+### D12 - Containerized packaging + CI
 
 Added a multi-stage `Dockerfile` (Go build stage, small Alpine runtime,
 non-root user) and wired a `payment_gateway` service into
@@ -262,22 +255,22 @@ either way.
 
 ## 5. Future considerations: reliability & scalability (out of scope here)
 
-This exercise deliberately left out a real database (D11) to avoid
-over-engineering a take-home. Idempotency keys (D10) and bank-call retry
-(D11) are handled, but both only within a single process - taking this from
+This exercise deliberately left out a real database (D10) to avoid
+over-engineering a take-home. Idempotency keys (D9) and bank-call retry
+(D10) are handled, but both only within a single process - taking this from
 an exercise to a production gateway would mean revisiting the rest of these
 tradeoffs.
 
 ### Reliability
 
-- **No circuit breaker.** We retry a failing bank 3 times (D11), but every
+- **No circuit breaker.** We retry a failing bank 3 times (D10), but every
   replica does this on its own. Under heavy load that's 3x the traffic
   hitting a bank that's already struggling. A circuit breaker would stop
   calling out for a bit after enough failures, instead of piling on.
-- **The idempotency store (D10) only lives in one process.** It's just an
+- **The idempotency store (D9) only lives in one process.** It's just an
   in-memory map. A restart wipes it, and two replicas behind a load balancer
   won't share it - so a retry that lands on a different replica could still
-  double-charge, which is exactly what D10 is supposed to prevent. Fixing
+  double-charge, which is exactly what D9 is supposed to prevent. Fixing
   this needs the same shared store as the repository (below), plus a TTL so
   old keys get cleaned up (Stripe uses 24h).
 
@@ -288,7 +281,7 @@ tradeoffs.
   memory, so each replica sees a different set of payments - a `GET` could
   `404` on one replica right after a `POST` succeeded on another. Fixing
   this means moving to a real shared store (Postgres, or Redis if that's
-  consistent enough), the same way `Acquirer` is already injected (D7).
+  consistent enough), the same way `Acquirer` is already injected (D6).
 - **Everything else already scales fine.** Handlers don't hold state, the
   acquirer client is just a plain `http.Client`, and the bank call has a
   timeout so it can't hang forever. Once the repository moves out of

@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   bank_simulator:
     container_name: bank_simulator
