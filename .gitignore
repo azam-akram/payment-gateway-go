@@ -82,4 +82,6 @@ terraform.rc
 .history
 .ionide
 
+decision.md
+
 # End of https://www.toptal.com/developers/gitignore/api/go,visualstudiocode,terraform

@@ -7,10 +7,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/acquirer"
-	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/models"
-	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/repository"
-	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/validator"
+	"github.com/payment-gateway-go/internal/acquirer"
+	"github.com/payment-gateway-go/internal/models"
+	"github.com/payment-gateway-go/internal/repository"
+	"github.com/payment-gateway-go/internal/validator"
 )
 
 // PaymentService implements the two payment gateway use cases.

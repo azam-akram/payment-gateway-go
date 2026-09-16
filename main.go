@@ -7,9 +7,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/cko-recruitment/payment-gateway-challenge-go/docs"
-	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/api"
-	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/logging"
+	"github.com/payment-gateway-go/docs"
+	"github.com/payment-gateway-go/internal/api"
+	"github.com/payment-gateway-go/internal/logging"
 )
 
 var (

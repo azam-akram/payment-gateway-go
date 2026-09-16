@@ -3,7 +3,7 @@ package repository
 import (
 	"sync"
 
-	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/models"
+	"github.com/payment-gateway-go/internal/models"
 )
 
 type PaymentsRepository struct {

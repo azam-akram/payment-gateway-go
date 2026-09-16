@@ -11,12 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/acquirer"
-	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/models"
-	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/repository"
-	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/payment-gateway-go/internal/acquirer"
+	"github.com/payment-gateway-go/internal/models"
+	"github.com/payment-gateway-go/internal/repository"
+	"github.com/payment-gateway-go/internal/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -6,10 +6,10 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/idempotency"
-	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/models"
-	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/service"
 	"github.com/go-chi/chi/v5"
+	"github.com/payment-gateway-go/internal/idempotency"
+	"github.com/payment-gateway-go/internal/models"
+	"github.com/payment-gateway-go/internal/service"
 )
 
 // idempotencyKeyHeader is required on every POST /api/payments so a retried

@@ -7,11 +7,11 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/acquirer"
-	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/repository"
-	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/payment-gateway-go/internal/acquirer"
+	"github.com/payment-gateway-go/internal/repository"
+	"github.com/payment-gateway-go/internal/service"
 	"golang.org/x/sync/errgroup"
 )
 

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/models"
+	"github.com/payment-gateway-go/internal/models"
 	"github.com/stretchr/testify/assert"
 )
 

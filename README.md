@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/azam-akram/payment-gateway-go/actions/workflows/ci.yml/badge.svg)](https://github.com/azam-akram/payment-gateway-go/actions/workflows/ci.yml)
 
-Implementation of the CKO Payment Gateway take-home challenge. 
+Implementation of the Payment Gateway.
 
 Please see [decision.md](decision.md) for the architecture and design rationale.
 

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/models"
+	"github.com/payment-gateway-go/internal/models"
 )
 
 // allowedCurrencies is the fixed 3-code allow-list required by the
